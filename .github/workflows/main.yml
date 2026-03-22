@@ -64,6 +64,18 @@ jobs:
         Categories=Science;Education;DataScience;
         EOF
 
+        # CORREÇÃO DO ÍCONE:
+        # Pega explicitamente a primeira camada da imagem [0] para evitar gerar múltiplos arquivos
+        convert "1000068048.ico[0]" -resize 64x64 csqca-udata.png || convert "1000068048.ico" -resize 64x64 csqca-udata.png
+        
+        # Caso o conversor adicione "-0" no nome automaticamente, nós arrumamos:
+        if [ -f csqca-udata-0.png ]; then mv csqca-udata-0.png csqca-udata.png; fi
+        
+        # Move o arquivo (o || true garante que o sistema não vai travar só por causa do ícone)
+        cp csqca-udata.png build_deb/csqca-udata_1.0_amd64/usr/share/pixmaps/ || true
+        
+        cp dist/app build_deb/csqca-udata_1.0_amd64/usr/bin/csqca-udata
+        chmod +x build_deb/csqca-udata_1.0_amd64/usr/bin/csqca-udata
         # Convertendo o ícone .ico para .png e movendo os arquivos
         convert 1000068048.ico -resize 64x64 csqca-udata.png
         cp csqca-udata.png build_deb/csqca-udata_1.0_amd64/usr/share/pixmaps/
