@@ -1,0 +1,82 @@
+name: Gerar Executável Linux (DEB)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch: # Permite rodar o script manualmente clicando num botão
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Baixar o código do repositório
+      uses: actions/checkout@v4
+
+    - name: Preparar o Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Instalar bibliotecas do App
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas matplotlib matplotlib-venn openpyxl pyinstaller sympy
+
+    - name: Instalar conversor de imagem (Linux)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y imagemagick
+
+    - name: Compilar com PyInstaller
+      run: |
+        # Atenção: no Linux usamos ":" para separar o ícone em vez de ";"
+        pyinstaller --noconsole --onefile --add-data "1000068048.ico:." app.py
+
+    - name: Criar a estrutura do pacote .DEB
+      run: |
+        # Criando as pastas
+        mkdir -p build_deb/csqca-udata_1.0_amd64/DEBIAN
+        mkdir -p build_deb/csqca-udata_1.0_amd64/usr/bin
+        mkdir -p build_deb/csqca-udata_1.0_amd64/usr/share/applications
+        mkdir -p build_deb/csqca-udata_1.0_amd64/usr/share/pixmaps
+
+        # Criando arquivo de controle (Metadados)
+        cat <<EOF > build_deb/csqca-udata_1.0_amd64/DEBIAN/control
+        Package: csqca-udata
+        Version: 1.0
+        Architecture: amd64
+        Maintainer: Laboratorio U.Data <contato@udata.com>
+        Description: csQCA U.Data - Analise Qualitativa Comparativa
+         Aplicativo para gerar Tabelas Verdade, Diagramas de Venn 
+         e minimizacao booleana a partir de CSV.
+        EOF
+
+        # Criando o atalho do menu Iniciar do Linux
+        cat <<EOF > build_deb/csqca-udata_1.0_amd64/usr/share/applications/csqca-udata.desktop
+        [Desktop Entry]
+        Name=csQCA U.Data
+        Comment=Análise csQCA Simplificada
+        Exec=/usr/bin/csqca-udata
+        Icon=csqca-udata
+        Terminal=false
+        Type=Application
+        Categories=Science;Education;DataScience;
+        EOF
+
+        # Convertendo o ícone .ico para .png e movendo os arquivos
+        convert 1000068048.ico -resize 64x64 csqca-udata.png
+        cp csqca-udata.png build_deb/csqca-udata_1.0_amd64/usr/share/pixmaps/
+        cp dist/app build_deb/csqca-udata_1.0_amd64/usr/bin/csqca-udata
+        chmod +x build_deb/csqca-udata_1.0_amd64/usr/bin/csqca-udata
+
+    - name: Empacotar o .DEB
+      run: |
+        cd build_deb
+        dpkg-deb --build csqca-udata_1.0_amd64
+
+    - name: Disponibilizar para Download
+      uses: actions/upload-artifact@v4
+      with:
+        name: csQCA-UData-Linux-Instalador
+        path: build_deb/csqca-udata_1.0_amd64.deb
