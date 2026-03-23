@@ -1,94 +1,125 @@
-name: Gerar Executável Linux (DEB)
+name: Gerar Executaveis (Win, Lin, Mac)
 
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch: # Permite rodar o script manualmente clicando num botão
+  workflow_dispatch:
 
 jobs:
-  build-linux:
-    runs-on: ubuntu-latest
-
+  # ==========================================
+  # 1. COMPILADOR WINDOWS (.exe)
+  # ==========================================
+  build-windows:
+    runs-on: windows-latest
     steps:
-    - name: Baixar o código do repositório
-      uses: actions/checkout@v4
-
-    - name: Preparar o Python
+    - uses: actions/checkout@v4
+    - name: Preparar Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
-
-    - name: Instalar bibliotecas do App
+    - name: Instalar Dependências
       run: |
         python -m pip install --upgrade pip
         pip install pandas matplotlib matplotlib-venn openpyxl pyinstaller sympy
-
-    - name: Instalar conversor de imagem (Linux)
+    - name: Compilar com PyInstaller (Windows)
       run: |
+        # No Windows o separador do add-data é ";"
+        pyinstaller --noconsole --onefile --name "csQCA_UData" --icon=1000068048.ico --add-data "1000068048.ico;." app.py
+    - name: Disponibilizar Executável Windows
+      uses: actions/upload-artifact@v4
+      with:
+        name: csQCA-UData-Windows-EXE
+        path: dist/csQCA_UData.exe
+
+  # ==========================================
+  # 2. COMPILADOR LINUX (.deb)
+  # ==========================================
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Preparar Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - name: Instalar Dependências e Ferramentas
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas matplotlib matplotlib-venn openpyxl pyinstaller sympy
         sudo apt-get update
         sudo apt-get install -y imagemagick
-
-    - name: Compilar com PyInstaller
+    - name: Compilar com PyInstaller (Linux)
       run: |
-        # Atenção: no Linux usamos ":" para separar o ícone em vez de ";"
-        pyinstaller --noconsole --onefile --add-data "1000068048.ico:." app.py
-
-    - name: Criar a estrutura do pacote .DEB
+        # No Linux o separador é ":"
+        pyinstaller --noconsole --onefile --name "csqca-udata" --add-data "1000068048.ico:." app.py
+    - name: Empacotar para .DEB
       run: |
-        # Criando as pastas
         mkdir -p build_deb/csqca-udata_1.0_amd64/DEBIAN
         mkdir -p build_deb/csqca-udata_1.0_amd64/usr/bin
         mkdir -p build_deb/csqca-udata_1.0_amd64/usr/share/applications
         mkdir -p build_deb/csqca-udata_1.0_amd64/usr/share/pixmaps
 
-        # Criando arquivo de controle (Metadados)
         cat <<EOF > build_deb/csqca-udata_1.0_amd64/DEBIAN/control
         Package: csqca-udata
         Version: 1.0
         Architecture: amd64
         Maintainer: Laboratorio U.Data <contato@udata.com>
         Description: csQCA U.Data - Analise Qualitativa Comparativa
-         Aplicativo para gerar Tabelas Verdade, Diagramas de Venn 
-         e minimizacao booleana a partir de CSV.
+         Geracao de Tabelas Verdade, Venn e minimizacao booleana.
         EOF
 
-        # Criando o atalho do menu Iniciar do Linux
         cat <<EOF > build_deb/csqca-udata_1.0_amd64/usr/share/applications/csqca-udata.desktop
         [Desktop Entry]
         Name=csQCA U.Data
-        Comment=Análise csQCA Simplificada
+        Comment=Analise csQCA
         Exec=/usr/bin/csqca-udata
         Icon=csqca-udata
         Terminal=false
         Type=Application
-        Categories=Science;Education;DataScience;
+        Categories=Science;Education;
         EOF
 
-        # CORREÇÃO DO ÍCONE:
-        # Pega explicitamente a primeira camada da imagem [0] para evitar gerar múltiplos arquivos
+        # Tratamento do ícone
         convert "1000068048.ico[0]" -resize 64x64 csqca-udata.png || convert "1000068048.ico" -resize 64x64 csqca-udata.png
-        
-        # Caso o conversor adicione "-0" no nome automaticamente, nós arrumamos:
         if [ -f csqca-udata-0.png ]; then mv csqca-udata-0.png csqca-udata.png; fi
-        
-        # Move o arquivo (o || true garante que o sistema não vai travar só por causa do ícone)
         cp csqca-udata.png build_deb/csqca-udata_1.0_amd64/usr/share/pixmaps/ || true
         
-        cp dist/app build_deb/csqca-udata_1.0_amd64/usr/bin/csqca-udata
+        cp dist/csqca-udata build_deb/csqca-udata_1.0_amd64/usr/bin/
         chmod +x build_deb/csqca-udata_1.0_amd64/usr/bin/csqca-udata
-        # Convertendo o ícone .ico para .png e movendo os arquivos
-        convert 1000068048.ico -resize 64x64 csqca-udata.png
-        cp csqca-udata.png build_deb/csqca-udata_1.0_amd64/usr/share/pixmaps/
-        cp dist/app build_deb/csqca-udata_1.0_amd64/usr/bin/csqca-udata
-        chmod +x build_deb/csqca-udata_1.0_amd64/usr/bin/csqca-udata
-
-    - name: Empacotar o .DEB
-      run: |
+        
         cd build_deb
         dpkg-deb --build csqca-udata_1.0_amd64
-
-    - name: Disponibilizar para Download
+    - name: Disponibilizar Instalador Linux
       uses: actions/upload-artifact@v4
       with:
-        name: csQCA-UData-Linux-Instalador
+        name: csQCA-UData-Linux-DEB
         path: build_deb/csqca-udata_1.0_amd64.deb
+
+  # ==========================================
+  # 3. COMPILADOR MACOS (.app / .zip)
+  # ==========================================
+  build-macos:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Preparar Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - name: Instalar Dependências
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas matplotlib matplotlib-venn openpyxl pyinstaller sympy
+    - name: Compilar com PyInstaller (macOS)
+      run: |
+        # No Mac usamos --windowed
+        pyinstaller --windowed --noconsole --name "csQCA_UData" --icon=1000068048.ico --add-data "1000068048.ico:." app.py
+    - name: Compactar App macOS
+      run: |
+        cd dist
+        zip -r csQCA_UData_macOS.zip csQCA_UData.app/
+    - name: Disponibilizar Instalador macOS
+      uses: actions/upload-artifact@v4
+      with:
+        name: csQCA-UData-macOS-ZIP
+        path: dist/csQCA_UData_macOS.zip
